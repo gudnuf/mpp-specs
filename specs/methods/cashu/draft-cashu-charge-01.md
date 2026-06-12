@@ -508,10 +508,10 @@ the token to the server itself, so there is no distinct recipient and
 
 ## Challenge Binding
 
-To prevent token replay across different resources or challenges,
-the server MUST bind the issued `request` parameters to the
-challenge `id` and verify, when a credential is presented, that
-`credential.challenge` is an exact echo of an issued challenge.
+To prevent replay across resources or challenges, the server MUST
+bind issued `request` parameters to the challenge `id` and verify
+that `credential.challenge` is an exact echo of an issued
+challenge.
 The server SHOULD compute `id` as the HMAC-SHA256 binding defined
 by {{I-D.httpauth-payment}} so that binding is stateless;
 alternatively the server MAY store issued challenges and verify by
@@ -530,11 +530,6 @@ include
 `digest` and SHOULD include any `opaque` correlation data it needs
 echoed.
 
-The single-use flag inside the embedded `creqA` ({{NUT-18}}) is
-always true for this method (see Method Details), but replay
-protection does not depend on it: it comes from challenge binding
-(above) together with the proof-level single-use property of the
-redeemed token (see {{security-replay}}).
 
 ## Short Keyset Identifiers {#short-keyset}
 
@@ -562,15 +557,10 @@ spent and cannot be restored. The server makes no change and
 returns no proofs to the client.
 
 A successful swap is destructive: the input proofs are consumed
-whether or not the server retains the result. The server MUST be
-able to reconstruct its swap outputs if it crashes between sending
-the swap and durably storing the returned signatures: either by
-persisting the blinded output secrets before sending the swap, or
-by deriving them deterministically ({{NUT-13}}) and recovering the
-mint's response via restore ({{NUT-09}}, which covers interrupted
-swaps). A server that cannot do so destroys the redeemed value on
-a crash: the mint has recorded the inputs as spent, and no party
-can recover the outputs.
+whether or not the server retains the result. The server MUST
+implement a recovery mechanism that guarantees swap outputs are
+recoverable after crash. Deterministic-secret recovery using
+{{NUT-13}} with restore {{NUT-09}} is RECOMMENDED.
 
 A swap whose request was transmitted but whose result was not
 received leaves consumption unknown. The server MUST resolve such
@@ -620,10 +610,9 @@ no replay. A client can confirm what happened with a proof-state
 check ({{NUT-07}}).
 
 A server that implements the framework's optional
-`Idempotency-Key` ({{I-D.httpauth-payment}}) MUST perform the
-idempotency lookup before the verification procedure: a redeemed
-token cannot be re-verified, so a verify-then-replay
-implementation never replays.
+`Idempotency-Key` ({{I-D.httpauth-payment}}) MUST ensure retries
+cannot cause additional redemptions and MUST return the original
+terminal result for equivalent retries.
 
 Servers MUST include `Cache-Control: no-store` on all HTTP
 402 responses. The challenge contains a single-use payment request;
@@ -801,15 +790,14 @@ presentation produced no definite answer.
 
 ## Token Replay {#security-replay}
 
-Replay protection for the "cashu" method lives at the proof level.
-A presented token is single-use: redeeming it swaps ({{NUT-03}})
-its proofs, after which the mint marks them spent and refuses any
-further swap. A second presentation of the same token therefore
-fails verification at the swap step. Servers MUST treat swap
-success as consume-once: the swap and the decision to return HTTP
-200 MUST be atomic, so that concurrent requests presenting the
-same token result in exactly one success and one rejection, with
-no window in which both are accepted.
+Replay protection for the "cashu" method relies on challenge
+binding and proof single-use at redemption. A presented token is
+single-use: redeeming it swaps ({{NUT-03}}) its proofs, after
+which the mint marks them spent and refuses further swap. Servers
+MUST treat swap success as consume-once: for the same
+`(challenge.id, token hash)`, at most one request can succeed.
+Concurrent duplicates MUST fail, with no window in which both are
+accepted.
 
 ## Challenge Binding
 
