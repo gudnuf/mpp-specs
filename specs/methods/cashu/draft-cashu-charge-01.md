@@ -427,7 +427,8 @@ Example (decoded):
 
 # Verification Procedure {#verification}
 
-Upon receiving a request with a credential, the server MUST:
+Upon receiving a request with a credential, the server MUST run verification in three phases:
+(1) deterministic pre-swap checks, (2) settlement swap, and (3) response mapping.
 
 1. Decode the base64url credential and parse the JSON.
 2. Verify that `payload.token` is present, is a string, and
@@ -520,15 +521,10 @@ each challenge auth-param byte-for-byte as issued, in particular
 the `request` string, used byte-as-issued (a decode/re-encode
 cycle changes the bytes and the recomputation fails). The
 challenge carries the framework-REQUIRED auth-params (`id`,
-`realm`, `method`, `intent`, `request`). A server operating
-statelessly MUST include `expires`: a stateless challenge has no
-server-side state to expire it, so one issued without `expires`
-never lapses, stays presentable indefinitely, and pins stale
-pricing. Under stored operation `expires` remains RECOMMENDED.
-When the charge gates a request with a body the server SHOULD
-include
-`digest` and SHOULD include any `opaque` correlation data it needs
-echoed.
+`realm`, `method`, `intent`, `request`). A stateless challenge MUST include `expires`; otherwise it can be
+presented indefinitely. Under stored operation `expires` remains
+RECOMMENDED. When the charge gates a request with a body, the
+server SHOULD include `digest` and any required `opaque` data.
 
 
 ## Short Keyset Identifiers {#short-keyset}
@@ -537,11 +533,10 @@ When a presented proof uses a short (version-`01`) keyset id, the
 server MUST resolve it to the full keyset against the mint's
 published keyset list ({{NUT-02}}); resolution is required to
 compute the swap fee ({{fees}}) and construct correct swap outputs.
-A short id that resolves to no keyset, or is ambiguous across the
-mint's keysets, MUST be rejected as `verification-failed`. A
-failure to fetch the keyset list at all (a network error reaching
-the mint) is distinct: the server answers HTTP 503 with the token
-NOT consumed (see {{errors}}), not `verification-failed`.
+If a short id resolves to no keyset or resolves ambiguously, the
+server MUST reject as `verification-failed`. If the keyset list
+cannot be fetched (for example, mint network failure), the server
+MUST return HTTP 503 and MUST NOT consume the token (see {{errors}}).
 
 # Settlement Procedure {#settlement}
 
@@ -583,22 +578,15 @@ the `Authorization` request; the server never performs it.
 
 ## Consume-Once and Resource Delivery
 
-The server MUST treat the redemption (the swap) and the decision to
-return HTTP 200 as a single operation: a challenge whose token has
-been redeemed MUST NOT be accepted again, even if resource delivery
-subsequently fails. A server using stored challenges records
-consumption only upon, and atomically with, swap success; a
-challenge whose swap never succeeded remains presentable
-(HTTP 503, {{errors}}). Once the swap succeeds the
-payment is complete:
-the server MUST NOT respond with a payment-failure status (402) or
-issue a fresh challenge for a condition detected after a successful
-swap. If resource delivery fails after the
-token is redeemed, the server MUST return an appropriate HTTP error
-(e.g., 500) and MUST NOT reissue the same challenge. The client
-MUST treat such a response as a payment loss and MAY retry with a
-new token. Cashu settlement is final once the swap succeeds; the
-redeemed token cannot be refunded by the server.
+The server MUST enforce consume-once semantics: for the same
+`(challenge.id, token hash)`, at most one request can succeed.
+Once swap succeeds, payment is final and the server MUST NOT return
+402 or issue a fresh challenge for that request. If resource
+delivery fails after redemption, the server MUST return an
+appropriate non-payment HTTP error (for example 500) and MUST NOT
+reissue the same challenge; the client MAY retry with a new token.
+A challenge whose swap never succeeded remains presentable only per
+{{errors}} handling (typically HTTP 503 while unresolved).
 
 The same loss mode applies when a success response is lost in
 transit: a later re-presentation of the same credential is a new
@@ -796,8 +784,7 @@ single-use: redeeming it swaps ({{NUT-03}}) its proofs, after
 which the mint marks them spent and refuses further swap. Servers
 MUST treat swap success as consume-once: for the same
 `(challenge.id, token hash)`, at most one request can succeed.
-Concurrent duplicates MUST fail, with no window in which both are
-accepted.
+Concurrent duplicates MUST fail.
 
 ## Challenge Binding
 
@@ -829,16 +816,11 @@ The server trusts the mints it lists in the payment request: a
 listed mint custodies the value the server redeems and could, in
 principle, refuse to honor a swap or rotate its keyset early.
 Membership is decided by canonicalized mint URL (verification
-step 5). Two mint URLs are equal when these transformations
-yield identical strings (the list is exhaustive; no further
-{{RFC3986}} normalization, such as percent-encoding case changes,
-is applied): lowercase the scheme and host (comparing an
-internationalized host in its punycode A-label form), drop a
-default port (443 for `https`, 80 for `http`), and strip all
-trailing slashes (as token serialization does, {{NUT-00}}); the
-path and query are otherwise case-sensitive and preserved
-verbatim. Clients likewise rely on the listed mints to honor the
-tokens they hold.
+step 5). Implementations MUST apply this minimal profile before
+comparison: lowercase scheme and host, drop default port (443 for
+`https`, 80 for `http`), and strip trailing slashes. After
+normalization, URLs MUST match exactly. Clients likewise rely on
+listed mints to honor held tokens.
 
 ## Privacy
 
