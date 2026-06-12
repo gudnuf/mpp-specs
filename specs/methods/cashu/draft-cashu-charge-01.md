@@ -126,15 +126,12 @@ a challenge-response mechanism that gates access to resources behind
 micropayments. This document registers the "charge" intent for the
 "cashu" payment method.
 
-Cashu is a Chaumian ecash protocol in which a mint issues
-blind-signed bearer tokens denominated in a unit. The mint's blind
-signatures let a token be redeemed without the mint linking the
-redemption to the token's issuance. A token carries its own value;
-it is verified and redeemed by swapping {{NUT-03}} it at the mint
-that signed it. The "cashu" method gates a resource
-behind presentation of such a token: the server names an amount,
-unit, and acceptable mint set in the challenge, and the client
-returns a token the server redeems to settle.
+Cashu is a Chaumian ecash protocol. A mint issues blind-signed
+bearer tokens denominated in a unit. Blind signatures allow
+redemption without linking redemption to issuance. A token carries
+its own value and is redeemed by swap {{NUT-03}} at the issuing
+mint. In this method, the challenge names amount, unit, and
+accepted mints; the client presents a token the server redeems.
 
 The flow proceeds as follows:
 
@@ -245,20 +242,16 @@ pre-funds the swap fee, presenting a value of at least
 
 ## Fees {#fees}
 
-A NUT-03 swap deducts a deterministic input fee set by the input
-proofs' keyset(s):
+A NUT-03 swap deducts a deterministic input fee from input proofs.
 `swap_fee = ceil(sum_over_proofs(input_fee_ppk) / 1000)`, where
-`input_fee_ppk` is published per keyset in the mint's keyset list
-({{NUT-02}}, {{NUT-03}}). The sum runs over proofs, not distinct
-keysets, and is computable from the presented proofs alone, so
-holder and server arrive at the same value.
+`input_fee_ppk` is published per keyset ({{NUT-02}}, {{NUT-03}}).
+The sum is over proofs, not distinct keysets.
 
-Because the server makes no change, the holder pre-funds the fee:
-the presented token's total value MUST be at least
-`amount + swap_fee`. The server recomputes `swap_fee` from the
-presented proofs ({{verification}}, step 7) and never trusts a
-client-supplied value. Value beyond the requirement is accepted
-and retained, so a client SHOULD present the exact total.
+Because the server returns no change, the holder pre-funds the fee.
+Presented value MUST be at least `amount + swap_fee`. The server
+MUST recompute `swap_fee` from presented proofs and MUST NOT trust
+a client-supplied fee. Excess value MAY be accepted and retained;
+clients SHOULD present the exact total.
 
 # Encoding Conventions {#encoding}
 
@@ -489,23 +482,18 @@ Upon receiving a request with a credential, the server MUST run verification in 
    `verification-failed` condition: the token was not redeemed
    (see {{settlement}}, {{errors}}).
 
-Steps 4 through 7 are structural and MUST be performed before the
-network swap in step 8, so a structurally invalid token never
-reaches the swap. The keyset resolution of step 6 MAY require
-fetching the mint's keysets {{NUT-02}} first. The expected values
-these steps check (`currency`, the mint set, `amount`) are
-derived from the authenticated challenge's embedded payment
-request, the authoritative artifact (see Method Details); the
-top-level auth-params were already required to match it at
-challenge construction.
+Steps 4-7 are structural and MUST run before step 8. Structurally
+invalid tokens MUST NOT reach the swap. Step 6 MAY require fetching
+mint keysets {{NUT-02}}.
 
-These steps satisfy the "charge" intent's verification
-responsibilities ({{I-D.payment-intent-charge}}): challenge-match and
-freshness in step 3, payment-proof verification (the swap itself)
-in steps 4-8, and amount-match in step 7 (read as the NET settled
-amount, per {{fees}}). Recipient-match is implicit: redemption swaps
-the token to the server itself, so there is no distinct recipient and
-`recipient` is omitted.
+The checked values (`currency`, mint set, `amount`) come from the
+authenticated embedded payment request, which is authoritative.
+
+This procedure satisfies "charge" verification
+({{I-D.payment-intent-charge}}): challenge match/freshness (step 3),
+payment-proof verification (steps 4-8, with swap as authority), and
+amount match (step 7, net settled amount per {{fees}}). Recipient
+match is implicit; redemption settles to the server.
 
 ## Challenge Binding
 
@@ -541,15 +529,13 @@ MUST return HTTP 503 and MUST NOT consume the token (see {{errors}}).
 # Settlement Procedure {#settlement}
 
 Settlement is the mint swap ({{NUT-03}}) of the presented token.
-The server swaps the whole token for fresh proofs it controls;
-holding those proofs is settlement. The mint deducts the swap fee
-({{fees}}) from the inputs, so the server's output proofs sum to
-at least `amount`. The server's outputs are blinded against the
-mint's currently ACTIVE keyset for the unit ({{NUT-02}}), which MAY
-differ from the keyset(s) that signed the input proofs. Cashu
-settlement is final once the swap succeeds: the input proofs are
-spent and cannot be restored. The server makes no change and
-returns no proofs to the client.
+The server swaps the whole token for fresh proofs it controls.
+Holding those outputs is settlement. The mint deducts swap fee
+({{fees}}), so outputs sum to at least `amount`. Output proofs are
+blinded against the unit's ACTIVE keyset ({{NUT-02}}), which MAY
+differ from input keysets. Settlement is final on swap success:
+inputs are spent and cannot be restored. The server returns no
+change and no proofs to the client.
 
 A successful swap is destructive: the input proofs are consumed
 whether or not the server retains the result. The server MUST
@@ -588,14 +574,13 @@ reissue the same challenge; the client MAY retry with a new token.
 A challenge whose swap never succeeded remains presentable only per
 {{errors}} handling (typically HTTP 503 while unresolved).
 
-The same loss mode applies when a success response is lost in
-transit: a later re-presentation of the same credential is a new
-request against an already-consumed challenge and fails: under
-stateless operation at the swap, as a spent token
-(`verification-failed`); under stored operation at the challenge
-lookup (`invalid-challenge`, {{errors}}). The protocol provides
-no replay. A client can confirm what happened with a proof-state
-check ({{NUT-07}}).
+If a success response is lost in transit, re-presenting the same
+credential is a new request against consumed state and MUST fail.
+Under stateless operation it fails at swap as spent token
+(`verification-failed`); under stored operation it fails at
+challenge lookup (`invalid-challenge`, {{errors}}). The protocol
+provides no replay. Clients can confirm outcome via
+proof-state check ({{NUT-07}}).
 
 A server that implements the framework's optional
 `Idempotency-Key` ({{I-D.httpauth-payment}}) MUST ensure retries
@@ -737,13 +722,11 @@ is unknown: the server MUST NOT claim the token unconsumed and
 MUST resolve the outcome before acting further on the same
 challenge (see {{settlement}}).
 
-A token whose mint is reachable but is not in the payment
-request's mint set, or whose unit is otherwise disallowed by
-server policy, is a `verification-failed` condition (HTTP 402),
-not a policy denial of an otherwise-valid payment. Servers that
-distinguish a successfully-redeemed payment from a subsequent
-policy denial of access MUST use HTTP 403 with no challenge, per
-{{I-D.httpauth-payment}}.
+If token mint membership or unit checks fail, the server MUST
+return `verification-failed` (HTTP 402). This is not a policy
+denial of an otherwise-valid payment. If payment succeeds but
+access is denied by policy, server MUST return HTTP 403 with no
+challenge, per {{I-D.httpauth-payment}}.
 
 Example error response body:
 
