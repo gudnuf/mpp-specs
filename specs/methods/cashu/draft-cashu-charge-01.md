@@ -552,8 +552,8 @@ the `Authorization` request; the server never performs it.
 
 ## Consume-Once and Resource Delivery
 
-The server MUST enforce consume-once semantics: for the same
-`(challenge.id, token hash)`, at most one request can succeed.
+The server MUST enforce consume-once semantics per challenge: at
+most one presentation for a given `challenge.id` can succeed.
 Once swap succeeds, payment is final and the server MUST NOT return
 402 or issue a fresh challenge for that request. If resource
 delivery fails after redemption, the server MUST return an
@@ -746,8 +746,8 @@ Replay protection for the "cashu" method relies on challenge
 binding and proof single-use at redemption. A presented token is
 single-use: redeeming it swaps ({{NUT-03}}) its proofs, after
 which the mint marks them spent and refuses further swap. Servers
-MUST treat swap success as consume-once: for the same
-`(challenge.id, token hash)`, at most one request can succeed.
+MUST treat swap success as consume-once per challenge: at most
+one presentation for a given `challenge.id` can succeed.
 Concurrent duplicates MUST fail.
 
 ## Challenge Binding
