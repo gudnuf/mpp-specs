@@ -255,32 +255,24 @@ clients SHOULD present the exact total.
 
 # Encoding Conventions {#encoding}
 
-All JSON {{RFC8259}} objects carried in auth-params or
-HTTP headers in this specification MUST be serialized using the JSON
-Canonicalization Scheme (JCS) {{RFC8785}} before encoding. JCS
-produces a deterministic byte sequence, which is required for
-any digest or signature operations defined by the base spec
-{{I-D.httpauth-payment}}.
+All JSON {{RFC8259}} objects in auth-params or HTTP headers in this
+specification MUST be serialized with JCS {{RFC8785}} before
+encoding. Deterministic bytes are required for digest/signature
+operations defined by {{I-D.httpauth-payment}}.
 
-The resulting bytes MUST then be encoded using base64url
-{{RFC4648}} Section 5 without padding characters (`=`).
-Implementations MUST NOT append `=` padding when encoding. A
-padded header value is malformed under the framework's grammar
-({{I-D.httpauth-payment}}); the cashu artifacts carried inside
-JSON strings (`creqA...`, `cashuB...`) MUST be accepted with or
-without padding, as their own encodings allow ({{NUT-18}},
-{{NUT-00}}).
+Serialized bytes MUST be base64url encoded per {{RFC4648}} Section 5
+without `=` padding. Implementations MUST NOT append padding.
+Padded header values are malformed under
+{{I-D.httpauth-payment}} grammar. Cashu artifacts carried as JSON
+strings (`creqA...`, `cashuB...`) MUST be accepted with or without
+padding per their own encodings ({{NUT-18}}, {{NUT-00}}).
 
-This encoding convention applies to: the `request`
-auth-param in `WWW-Authenticate`, the credential in
-`Authorization`, and the receipt in
-`Payment-Receipt`.
+This applies to `request` in `WWW-Authenticate`, the credential in
+`Authorization`, and the receipt in `Payment-Receipt`.
 
-The Cashu payment request (`methodDetails.paymentRequest`) and the Cashu
-token (`payload.token`) are opaque string values within the
-JCS-canonical `request` object; their own internal encoding
-({{NUT-18}}, {{NUT-00}}) is never canonicalized; JCS conformance is
-a property of the enclosing object only.
+`methodDetails.paymentRequest` and `payload.token` are opaque strings
+inside enclosing JCS-canonical objects. Their internal encodings are
+not canonicalized; only the enclosing object is.
 
 # Request Schema
 
@@ -333,15 +325,11 @@ externalId
 
 ## Method Details
 
-The following field is nested under `methodDetails` in the
-request JSON. The Cashu payment request
-(`methodDetails.paymentRequest`) is the authoritative source for
-all payment parameters, including the set of mints whose tokens
-the server accepts for this challenge. Clients MUST decode and
-verify the payment request independently before presenting, and
-MUST reject challenges where `amount` or `currency` do not match
-the values encoded in the payment request, or whose single-use
-flag is not true.
+The following field is nested under `methodDetails` in request JSON.
+`methodDetails.paymentRequest` is authoritative for all payment
+parameters, including accepted mints. Clients MUST decode and verify
+it before presenting. If `amount`/`currency` mismatches or
+single-use is not true, clients MUST reject the challenge.
 
 paymentRequest
 : REQUIRED. The Cashu payment request string ({{NUT-18}}, a
@@ -371,8 +359,8 @@ paymentRequest
 
 # Credential Schema
 
-The `Authorization` header carries a single base64url-encoded
-JSON token (no auth-params). The decoded object contains two
+The `Authorization` header carries one base64url-encoded JSON
+credential (no auth-params). The decoded object contains these
 top-level fields:
 
 challenge
@@ -743,21 +731,14 @@ Example error response body:
 
 ## Client-Side Verification {#security-client}
 
-A client that skips the independent checks required by the
-`paymentRequest` definition (Method Details), decoding the
-payment request and confirming its amount, unit, and mint set,
-can be induced to pay the wrong amount or unit, or to pay toward
-an attacker-substituted mint.
+If clients skip independent `paymentRequest` checks (amount, unit,
+mint set), they can be induced to pay wrong amount/unit or an
+attacker-substituted mint.
 
-After an outcome that never resolved (a timeout, connection
-loss, or 5xx after a credential was sent), a client can settle
-its token's fate with a proof-state check at the mint
-({{NUT-07}}): proofs SPENT mean the server redeemed the token
-(the payment happened; whether the resource arrived is the loss
-mode of {{settlement}}), proofs UNSPENT mean nothing was redeemed
-and the same token remains safe to re-present. Clients SHOULD
-perform this check before reusing or writing off a token whose
-presentation produced no definite answer.
+For unresolved outcomes (timeout, connection loss, or 5xx after
+credential submission), clients SHOULD check proof state at the mint
+({{NUT-07}}) before reusing or writing off a token. SPENT means
+redemption occurred; UNSPENT means no redemption occurred.
 
 ## Token Replay {#security-replay}
 
@@ -838,16 +819,13 @@ credential-verification attempts per {{I-D.httpauth-payment}}.
 
 ## Transport Security {#security-transport}
 
-A Cashu token without a spending condition is a bearer
-credential: any party that observes it in transit before it is
-redeemed can redeem it itself, and challenge binding does not
-prevent this (it binds the credential to a challenge, not the
-token to a holder). The framework's TLS requirement
-({{I-D.httpauth-payment}}) therefore carries the token's full
-value, including across TLS-terminating hops such as reverse
-proxies. Servers SHOULD redeem a presented token promptly; TLS
-and prompt redemption shrink the exposure window rather than
-close it.
+A Cashu token without spending condition is a bearer credential.
+Any party that observes it before redemption can redeem it.
+Challenge binding does not prevent theft; it binds credential to
+challenge, not token to holder. TLS required by
+{{I-D.httpauth-payment}} therefore protects full token value,
+including across TLS-terminating hops (for example reverse
+proxies). Servers SHOULD redeem promptly to reduce exposure window.
 
 # IANA Considerations
 
