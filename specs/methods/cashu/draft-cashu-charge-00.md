@@ -1,8 +1,8 @@
 ---
 title: Cashu Charge Intent for HTTP Payment Authentication
 abbrev: Cashu Charge Intent
-docname: draft-cashu-charge-01
-version: 01
+docname: draft-cashu-charge-00
+version: 00
 category: info
 ipr: noModificationTrust200902
 submissiontype: independent
@@ -780,7 +780,8 @@ The server trusts the mints it lists in the payment request: a
 listed mint custodies the value the server redeems and could, in
 principle, refuse to honor a swap or rotate its keyset early.
 Membership is decided by canonicalized mint URL (verification
-step 5). Implementations MUST apply this minimal profile before
+step 5). Implementations MUST apply this minimal profile, a subset
+of the syntax-based normalization in {{RFC3986}}, before
 comparison: lowercase scheme and host, drop default port (443 for
 `https`, 80 for `http`), and strip trailing slashes. After
 normalization, URLs MUST match exactly. Clients likewise rely on
